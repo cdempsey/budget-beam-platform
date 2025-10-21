@@ -2,7 +2,7 @@
 
 This is a full-stack portfolio project demonstrating a modern, event-driven, cloud-native application. It ingests, enriches, and serves real-time financial transaction data.
 
-The purpose of this project is to showcase a transition back to a hands-on, Staff-level engineering role by building a complex, end-to-end system using modern best practices.
+The purpose of this project is to showcase a transition back to a hands-on, end-to-end system using modern best practices.
 
 ## The Pitch
 
@@ -131,4 +131,3 @@ graph TD
 ### Development & AI
 * **VS Code**
 * **GitHub Copilot** (for unit test generation and boilerplate acceleration)
-* **Gemini** (as an architectural "thought partner" for debugging and design)
