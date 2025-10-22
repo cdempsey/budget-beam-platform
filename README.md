@@ -97,6 +97,39 @@ graph TD
     BudgetSvc -- Writes to --> DB
     BudgetSvc -- Invalidates --> Cache
 ```
+## Service Descriptions
+
+This monorepo contains the following services:
+
+### Backend Services (`/services`)
+
+* **`ingestion-service`**:
+    * **Description:** A Java/Spring Boot service that exposes a REST API endpoint to receive raw transaction data from external sources (simulating bank APIs like Plaid).
+    * **Responsibilities:** Validates incoming raw transaction data and publishes a `raw_transaction_posted` event to the Kafka topic.
+    * **Primary Tech:** Java, Spring Web, Spring for Apache Kafka.
+
+* **`enrichment-service`**:
+    * **Description:** A Java/Spring Boot service that listens for `raw_transaction_posted` events from Kafka.
+    * **Responsibilities:** Applies business logic (e.g., a rules engine or external lookup) to categorize the transaction based on merchant information. Publishes an enriched `categorized_transaction_added` event back to Kafka.
+    * **Primary Tech:** Java, Spring for Apache Kafka.
+
+* **`budgeting-service`**:
+    * **Description:** A Java/Spring Boot service acting as the "write model" and the primary owner of the application's state. It listens for `categorized_transaction_added` events from Kafka.
+    * **Responsibilities:** Persists the final, categorized transaction details to the PostgreSQL database. Updates the user's budget status (e.g., decrementing remaining amount for the category) in the database. Invalidates relevant entries in the Redis cache used by the `query-service`.
+    * **Primary Tech:** Java, Spring Data JPA (PostgreSQL), Spring for Apache Kafka, Spring Data Redis.
+
+* **`query-service`**:
+    * **Description:** A Java/Spring Boot service acting as the "read model" backend-for-frontend (BFF). It serves the data needs of the `web-ui`.
+    * **Responsibilities:** Exposes a GraphQL API for querying transaction history and budget status. Reads data primarily from the Redis cache for performance, falling back to the PostgreSQL database if the cache misses. Handles budget update *mutations* from the UI (though the core budget calculation logic resides in `budgeting-service`).
+    * **Primary Tech:** Java, Spring GraphQL, Spring Data Redis, Spring Data JPA (PostgreSQL).
+
+### Frontend UI (`/ui`)
+
+* **`web-ui`**:
+    * **Description:** A React single-page application (SPA) providing the user interface for BudgetBeam.
+    * **Responsibilities:** Allows users to view their categorized transactions, visualize their budget status (e.g., using charts), and potentially set/update their budget allocations. Communicates exclusively with the `query-service` via its GraphQL API.
+    * **Primary Tech:** React, React Query, TailwindCSS, Chart.js.
+
 
 ## Tech Stack
 
