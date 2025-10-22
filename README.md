@@ -104,7 +104,7 @@ This monorepo contains the following services:
 ### Backend Services (`/services`)
 
 * **`ingestion-service`**:
-    * **Description:** A Java/Spring Boot service that exposes a REST API endpoint to receive raw transaction data from external sources (simulating bank APIs like Plaid).
+    * **Description:** A Java/Spring Boot service that exposes a REST API endpoint to receive raw transaction data from external sources (simulating bank APIs).
     * **Responsibilities:** Validates incoming raw transaction data and publishes a `raw_transaction_posted` event to the Kafka topic.
     * **Primary Tech:** Java, Spring Web, Spring for Apache Kafka.
 
