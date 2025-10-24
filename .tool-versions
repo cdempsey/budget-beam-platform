@@ -1,0 +1,4 @@
+java openjdk-21.0.2
+nodejs lts
+awscli 2.31.19
+terraform 1.13.4
