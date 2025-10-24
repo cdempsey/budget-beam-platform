@@ -109,6 +109,23 @@ services:
       timeout: 5s
       retries: 3
 
+  # React Vite UI (development with hot reloading)
+  web-ui:
+    <<: *default-opts
+    build:
+      context: ./ui/web-ui
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "1"
+      WATCHPACK_POLLING: "1"
+    volumes:
+      - ./ui/web-ui:/app
+      - web_ui_node_modules:/app/node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
   # Application services
   ingestion-service:
     <<: *spring-opts
@@ -233,4 +250,6 @@ volumes:
   zookeeper_data:
     driver: local
   redis_data:
+    driver: local
+  web_ui_node_modules:
     driver: local

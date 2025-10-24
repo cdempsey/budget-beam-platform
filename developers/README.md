@@ -250,6 +250,7 @@ The following application endpoints should be available:
 - Ingestion Service: http://localhost:8081
 - Enrichment Service: http://localhost:8082
 - Budgeting Service: http://localhost:8083
+ - Web UI (Vite dev): http://localhost:5173
 
 To check service health:
 
@@ -271,6 +272,25 @@ The following infrastructure services are also running:
 - Kafka: localhost:9092
 - Zookeeper: localhost:2181
 - Redis: localhost:6379
+
+### Running the React Web UI (Dev)
+
+The UI is a Vite-based React app with hot reloading. Run it in a dev container:
+
+```bash
+# Start only the UI dev server
+docker compose up -d web-ui
+
+# Follow logs (optional)
+docker compose logs -f web-ui
+
+# Open in browser
+xdg-open http://localhost:5173 || open http://localhost:5173
+```
+
+Notes:
+- Source is bind-mounted into the container, so edits in `ui/web-ui` hot-reload automatically.
+- If your network blocks HMR websockets, ensure port 5173 is open.
 
 ## Development Workflow
 

@@ -1,0 +1,28 @@
+# Dev container for Vite React app with hot reloading
+# Uses Node LTS and installs dependencies with caching
+
+FROM node:20-alpine
+
+# Create app directory
+WORKDIR /app
+
+# Install OS deps (optional tools)
+RUN apk add --no-cache bash
+
+# Install dependencies first (leverage Docker layer cache)
+COPY package.json package-lock.json* ./
+RUN npm ci --loglevel=error
+
+# Default port for Vite
+EXPOSE 5173
+
+# Environment for reliable file watching in containers
+ENV CHOKIDAR_USEPOLLING=1 \
+    WATCHPACK_POLLING=true \
+    NODE_ENV=development
+
+# Copy the rest of the app (in compose we'll bind mount during dev)
+COPY . .
+
+# Run Vite dev server binding to all interfaces for Docker
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
