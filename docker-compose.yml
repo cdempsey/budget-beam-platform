@@ -1,0 +1,255 @@
+version: '3.8'
+
+# Define default settings for all services
+x-default-opts: &default-opts
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+# Define common settings for Spring Boot services
+x-spring-opts: &spring-opts
+  <<: *default-opts
+  environment: &spring-env
+    JAVA_OPTS: >
+      -XX:+UseContainerSupport
+      -XX:MaxRAMPercentage=75.0
+      -XX:InitialRAMPercentage=50.0
+      -XX:+OptimizeStringConcat
+      -XX:+UseStringDeduplication
+      -Djava.security.egd=file:/dev/./urandom
+      -Dspring.output.ansi.enabled=ALWAYS
+    SPRING_PROFILES_ACTIVE: local
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+      reservations:
+        memory: 256M
+  volumes:
+    - /tmp
+    - /logs
+
+services:
+  # Infrastructure services
+  postgres:
+    <<: *default-opts
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: budgetbeam
+      POSTGRES_USER: budgetbeam
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U budgetbeam"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  zookeeper:
+    <<: *default-opts
+    image: confluentinc/cp-zookeeper:7.5.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  kafka:
+    <<: *default-opts
+    image: confluentinc/cp-kafka:7.5.1
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    <<: *default-opts
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # React Vite UI (development with hot reloading)
+  web-ui:
+    <<: *default-opts
+    build:
+      context: ./ui/web-ui
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "1"
+      WATCHPACK_POLLING: "1"
+    volumes:
+      - ./ui/web-ui:/app
+      - web_ui_node_modules:/app/node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
+  # Application services
+  ingestion-service:
+    <<: *spring-opts
+    build:
+      context: ./services/ingestion-service
+      dockerfile: Dockerfile
+      args:
+        CREATED_DATE: ${CREATED_DATE:-2025-10-24T00:00:00Z}
+    environment:
+      <<: *spring-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/budgetbeam
+      SPRING_DATASOURCE_USERNAME: budgetbeam
+      SPRING_DATASOURCE_PASSWORD_FILE: /run/secrets/db_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    secrets:
+      - db_password
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  enrichment-service:
+    <<: *spring-opts
+    build:
+      context: ./services/enrichment-service
+      dockerfile: Dockerfile
+      args:
+        CREATED_DATE: ${CREATED_DATE:-2025-10-24T00:00:00Z}
+    environment:
+      <<: *spring-env
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8082:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  budgeting-service:
+    <<: *spring-opts
+    build:
+      context: ./services/budgeting-service
+      dockerfile: Dockerfile
+      args:
+        CREATED_DATE: ${CREATED_DATE:-2025-10-24T00:00:00Z}
+    environment:
+      <<: *spring-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/budgetbeam
+      SPRING_DATASOURCE_USERNAME: budgetbeam
+      SPRING_DATASOURCE_PASSWORD_FILE: /run/secrets/db_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    secrets:
+      - db_password
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  query-service:
+    <<: *spring-opts
+    build:
+      context: ./services/query-service
+      dockerfile: Dockerfile
+      args:
+        CREATED_DATE: ${CREATED_DATE:-2025-10-24T00:00:00Z}
+    environment:
+      <<: *spring-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/budgetbeam
+      SPRING_DATASOURCE_USERNAME: budgetbeam
+      SPRING_DATASOURCE_PASSWORD_FILE: /run/secrets/db_password
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+    secrets:
+      - db_password
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Define secrets
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+volumes:
+  postgres_data:
+    driver: local
+  kafka_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  redis_data:
+    driver: local
+  web_ui_node_modules:
+    driver: local
