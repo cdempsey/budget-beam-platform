@@ -250,7 +250,7 @@ The following application endpoints should be available:
 - Ingestion Service: http://localhost:8081
 - Enrichment Service: http://localhost:8082
 - Budgeting Service: http://localhost:8083
- - Web UI (Vite dev): http://localhost:5173
+- Web UI (Vite dev): http://localhost:5173
 
 To check service health:
 
