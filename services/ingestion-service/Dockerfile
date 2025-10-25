@@ -33,6 +33,10 @@ WORKDIR /app
 # Copy the jar from builder stage
 COPY --from=builder --chown=spring:spring /app/build/libs/*.jar app.jar
 
+# Copy entrypoint script
+COPY --chown=spring:spring docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Configure JVM for containerized environment
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
@@ -59,8 +63,8 @@ VOLUME ["/tmp", "/logs"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/actuator/health || exit 1
 
-# Set read-only filesystem
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar app.jar"]
+# Use entrypoint script to handle Docker secrets
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Security options
 STOPSIGNAL SIGTERM
